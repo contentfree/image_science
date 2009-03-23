@@ -14,6 +14,21 @@ class ImageScience
   VERSION = '1.1.3'
 
   ##
+  # Rotates a JPEG using FreeImage's JPEGTransform. This performs a (near)
+  # lossless rotation. "If the dimensions are not a multiple of the iMCU size
+  # (usually 8 or 16 pixels), the rotation performs a little oddly because 
+  # the rotation can only transform complete blocks of DCT coefficient data
+  # in the desired way" (paraphrased from FreeImage docs). You may avoid this
+  # by setting the +perfect+ parameter to true and any non-reversible rotation 
+  # is avoided. Instead, an error is thrown. Note: You must ensure
+  # +input+ exists before calling +ImageScience.rotate_jpg+.
+  
+  def self.rotate_jpg(input, output, clockwise, perfect = false)   
+    raise RuntimeError.new("Input file doesn't exist") unless File.exists?(input)
+    rotate_jpg_inline(input, output, clockwise, perfect)
+  end
+
+  ##
   # The top-level image loader opens +path+ and then yields the image.
 
   def self.with_image(path) # :yields: image
@@ -35,6 +50,12 @@ class ImageScience
   # Returns the height of the image, in pixels.
 
   def height; end
+
+  ##
+  # Rotates the image using FreeImage's RotateClassic by +angle+ degrees
+  
+  def rotate(angle) # :yields: image
+  end
 
   ##
   # Saves the image out to +path+. Changing the file extension will
@@ -140,6 +161,23 @@ class ImageScience
     builder.add_to_init "FreeImage_SetOutputMessage(FreeImageErrorHandler);"
 
     builder.c_singleton <<-"END"
+      VALUE rotate_jpg_inline(char * input, char * output, int clockwise, int perfect) {
+        FREE_IMAGE_FORMAT fif = FIF_UNKNOWN; 
+        
+        fif = FreeImage_GetFileType(input, 0); 
+        if (fif == FIF_UNKNOWN) fif = FreeImage_GetFIFFromFilename(input); 
+        if (fif == FIF_JPEG) { 
+          if ( !FreeImage_JPEGTransform( input, output, ( clockwise ? FIJPEG_OP_ROTATE_90 : FIJPEG_OP_ROTATE_270 ), perfect )) {
+            rb_raise(rb_eRuntimeError, "Couldn't rotate file");
+          }
+          return Qtrue;
+        }
+        
+        rb_raise(rb_eTypeError, "Unknown file format");
+      }
+    END
+
+    builder.c_singleton <<-"END"
       VALUE with_image(char * input) {
         FREE_IMAGE_FORMAT fif = FIF_UNKNOWN;
 
@@ -149,7 +187,7 @@ class ImageScience
           FIBITMAP *bitmap;
           VALUE result = Qnil;
           int flags = fif == FIF_JPEG ? JPEG_ACCURATE : 0;
-          if (bitmap = FreeImage_Load(fif, input, flags)) {
+          if ((bitmap = FreeImage_Load(fif, input, flags))) {
             result = wrap_and_yield(bitmap, self, fif);
           }
           return result;
@@ -164,7 +202,7 @@ class ImageScience
         VALUE result = Qnil;
         GET_BITMAP(bitmap);
 
-        if (copy = FreeImage_Copy(bitmap, l, t, r, b)) {
+        if ((copy = FreeImage_Copy(bitmap, l, t, r, b))) {
           copy_icc_profile(self, bitmap, copy);
           result = wrap_and_yield(copy, self, 0);
         }
@@ -199,6 +237,15 @@ class ImageScience
           return wrap_and_yield(image, self, 0);
         }
         return Qnil;
+      }
+    END
+
+    builder.c <<-"END"
+      VALUE rotate(double angle) {
+        GET_BITMAP(bitmap);
+        FIBITMAP *image = FreeImage_RotateClassic(bitmap, angle);
+        copy_icc_profile(self, bitmap, image);
+        return wrap_and_yield(image, self, 0);
       }
     END
 

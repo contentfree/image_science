@@ -121,4 +121,71 @@ class TestImageScience < Test::Unit::TestCase
 
     deny File.exists?(@tmppath)
   end
+  
+  def test_rotate
+    @path = 'test/ruby.jpg'
+    @tmppath = 'test/ruby-tmp.jpg'
+    
+    ImageScience.with_image @path do |img|
+      img.rotate(90) do |rotated|
+        assert rotated.save(@tmppath)
+      end
+    end
+    
+    ImageScience.with_image @tmppath do |img|
+      assert_equal 70, img.width
+      assert_equal 50, img.height
+    end
+  end
+  
+  def test_rotate_float
+    @path = 'test/ruby.jpg'
+    @tmppath = 'test/ruby-tmp.jpg'
+    
+    ImageScience.with_image @path do |img|
+      img.rotate(90.0) do |rotated|
+        assert rotated.save(@tmppath)
+      end
+    end
+  end
+  
+  def test_rotate_jpg
+    @path = 'test/ruby.jpg'
+    @tmppath = 'test/ruby-tmp.jpg'
+    
+    ImageScience.with_image @path do |img|
+      assert_equal 50, img.width
+      assert_equal 70, img.height
+    end
+    
+    ImageScience.rotate_jpg( @path, @tmppath, true )
+    ImageScience.with_image @tmppath do |img|
+      assert_not_equal 50, img.width # Just test for not_equal because rotate_jpg might shave off pixels since we're not setting the 'perfect' parameter in the method call
+      assert_not_equal 70, img.height
+    end
+  end
+  
+  def test_rotate_jpg_without_file
+    @path = 'test/FAKE.jpg'
+    @tmppath = 'test/ruby-tmp.jpg'
+    
+    assert_raises RuntimeError do
+      ImageScience.rotate_jpg( @path, @tmppath, true ) 
+    end
+    
+    deny File.exists?(@tmppath)
+  end
+  
+  # The test file is 50x70 and won't rotate absolutely losslessly. FreeImage chops 
+  # off 6 pixels from the left hand side. See the docs for rotate_jpg for more info.
+  def test_perfect_rotate_jpg
+    @path = 'test/ruby.jpg'
+    @tmppath = 'test/ruby-tmp.jpg'
+    
+    assert_raises RuntimeError do
+      ImageScience.rotate_jpg( @path, @tmppath, true, true ) 
+    end
+    
+    deny File.exists?(@tmppath)
+  end
 end
