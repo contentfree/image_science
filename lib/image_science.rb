@@ -2,6 +2,7 @@
 
 require 'rubygems'
 require 'inline'
+require 'rbconfig'
 
 ##
 # Provides a clean and simple API to generate thumbnails using
@@ -103,11 +104,8 @@ class ImageScience
   end
 
   inline do |builder|
-    if test ?d, "/opt/local" then
-      builder.add_compile_flags "-I/opt/local/include"
-      builder.add_link_flags "-L/opt/local/lib"
-    end
-
+    builder.add_compile_flags "-I#{Config::CONFIG['includedir']}"
+    builder.add_link_flags "-L#{Config::CONFIG['libdir']}"
     builder.add_link_flags "-lfreeimage"
     builder.add_link_flags "-lstdc++" # only needed on PPC for some reason. lame
     builder.include '"FreeImage.h"'
