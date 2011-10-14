@@ -1,10 +1,17 @@
-require 'test/unit/testcase'
-require 'test/unit' if $0 == __FILE__
+dir = File.expand_path "~/.ruby_inline"
+if test ?d, dir then
+  require 'fileutils'
+  puts "nuking #{dir}"
+  # force removal, Windoze is bitching at me, something to hunt later...
+  FileUtils.rm_r dir, :force => true
+end
+
+require 'rubygems'
+require 'minitest/unit'
+require 'minitest/autorun' if $0 == __FILE__
 require 'image_science'
 
-class TestImageScience < Test::Unit::TestCase
-  def deny x; assert ! x; end
-
+class TestImageScience < MiniTest::Unit::TestCase
   def setup
     @path = 'test/pix.png'
     @tmppath = 'test/pix-tmp.png'
@@ -41,8 +48,37 @@ class TestImageScience < Test::Unit::TestCase
   end
 
   def test_class_with_image_missing_with_img_extension
-    assert_nil ImageScience.with_image("nope#{@path}") do |img|
-      flunk
+    assert_raises RuntimeError do
+      assert_nil ImageScience.with_image("nope#{@path}") do |img|
+        flunk
+      end
+    end
+  end
+
+  def test_class_with_image_from_memory
+    data = File.new(@path).binmode.read
+
+    ImageScience.with_image_from_memory data do |img|
+      assert_kind_of ImageScience, img
+      assert_equal @h, img.height
+      assert_equal @w, img.width
+      assert img.save(@tmppath)
+    end
+
+    assert File.exists?(@tmppath)
+
+    ImageScience.with_image @tmppath do |img|
+      assert_kind_of ImageScience, img
+      assert_equal @h, img.height
+      assert_equal @w, img.width
+    end
+  end
+
+  def test_class_with_image_from_memory_empty_string
+    assert_raises TypeError do
+      ImageScience.with_image_from_memory "" do |img|
+        flunk
+      end
     end
   end
 
@@ -87,7 +123,7 @@ class TestImageScience < Test::Unit::TestCase
       end
     end
 
-    deny File.exists?(@tmppath)
+    refute File.exists?(@tmppath)
 
     assert_raises ArgumentError do
       ImageScience.with_image @path do |img|
@@ -97,7 +133,7 @@ class TestImageScience < Test::Unit::TestCase
       end
     end
 
-    deny File.exists?(@tmppath)
+    refute File.exists?(@tmppath)
   end
 
   def test_resize_negative
@@ -109,7 +145,7 @@ class TestImageScience < Test::Unit::TestCase
       end
     end
 
-    deny File.exists?(@tmppath)
+    refute File.exists?(@tmppath)
 
     assert_raises ArgumentError do
       ImageScience.with_image @path do |img|
@@ -119,7 +155,7 @@ class TestImageScience < Test::Unit::TestCase
       end
     end
 
-    deny File.exists?(@tmppath)
+    refute File.exists?(@tmppath)
   end
   
   def test_rotate
